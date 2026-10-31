@@ -1,3 +1,33 @@
 export default function LegalPage() {
-  return <><section className="page-top"><div className="container"><h1>Informations et confidentialité</h1><p>Informations provisoires à compléter avant toute ouverture publique.</p></div></section><section className="section"><div className="container panel"><h2>Protection des données</h2><p className="muted">Cette version est un prototype de démonstration. Les demandes saisies sont stockées localement dans le navigateur utilisé et ne sont pas transmises à un serveur. Avant mise en production, l'identité du responsable de traitement, les finalités, la base légale, les destinataires, les durées de conservation, les droits des personnes et les coordonnées de contact devront être précisés dans une politique de confidentialité complète.</p><h2 style={{marginTop:24}}>Mentions légales</h2><p className="muted">Éditeur, hébergeur et coordonnées de contact à compléter par le porteur de l'initiative avant publication.</p></div></section></>;
+  return (
+    <>
+      <section className="page-top">
+        <div className="container">
+          <h1>Informations et confidentialité</h1>
+          <p>Informations provisoires à compléter avant toute ouverture publique.</p>
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="container panel">
+          <h2>Protection des données</h2>
+          <p className="muted">
+            Cette version est un prototype de démonstration. Les demandes saisies
+            sont stockées localement dans le navigateur utilisé et ne sont pas
+            transmises à un serveur. Avant mise en production, l&apos;identité du
+            responsable de traitement, les finalités, la base légale, les
+            destinataires, les durées de conservation, les droits des personnes
+            et les coordonnées de contact devront être précisés dans une
+            politique de confidentialité complète.
+          </p>
+
+          <h2 style={{ marginTop: 24 }}>Mentions légales</h2>
+          <p className="muted">
+            Éditeur, hébergeur et coordonnées de contact à compléter par le
+            porteur de l&apos;initiative avant publication.
+          </p>
+        </div>
+      </section>
+    </>
+  );
 }
