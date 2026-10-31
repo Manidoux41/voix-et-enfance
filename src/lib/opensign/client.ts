@@ -17,6 +17,8 @@ export async function createOpenSignRequest(_input: {
   email: string;
   documentUrl: string;
 }) {
+
+  void _input;
   if (!isOpenSignConfigured()) {
     throw new Error("OpenSign n'est pas configuré. Renseignez OPENSIGN_BASE_URL et OPENSIGN_API_TOKEN.");
   }
