@@ -217,10 +217,11 @@ test("toutes les routes métier refusent l'accès anonyme avant la base", async 
     "@/lib/signing/security": { sha256() { throw new Error("unexpected hash"); } },
     "@/lib/content-fields": load("src/lib/content-fields.ts"),
     "@/lib/admin/password": load("src/lib/admin/password.ts"),
+    "@/lib/admin/registry-pdf": load("src/lib/admin/registry-pdf.ts"),
     "@/lib/signing/email": { sendTransactionalEmail() { throw new Error("unexpected email"); } },
     "next/server": { NextResponse },
   };
-  for (const file of ["signatories", "signatures/download", "documents", "users", "content", "export", "audit", "invitations", "password"]) {
+  for (const file of ["signatories", "signatures/download", "documents", "users", "content", "export", "export/pdf", "audit", "invitations", "password"]) {
     const route = load(`src/app/api/admin/${file}/route.ts`, mocks);
     for (const method of ["GET","POST","PUT","PATCH","DELETE"]) {
       if (typeof route[method] !== "function") continue;
@@ -345,6 +346,15 @@ test("une invitation est autorisee avant son envoi et ne divulgue pas son lien d
   const events = [];
   const auth = authFixture().auth;
   const db = {
+    from: table => {
+      assert.equal(table, "audit_logs");
+      return { insert: async entry => {
+        assert.equal(entry.action, "admin.invitation_sent");
+        assert.equal(entry.metadata.email_message_id, "mailjet-message");
+        events.push("audit");
+        return { error: null };
+      } };
+    },
     auth: { admin: { generateLink: async input => {
       assert.equal(input.type, "invite");
       return { data: { user: { id: "invited-id" }, properties: { hashed_token: "private-token" } }, error: null };
@@ -359,14 +369,97 @@ test("une invitation est autorisee avant son envoi et ne divulgue pas son lien d
     "@/lib/admin/http": httpFixture({ ...auth, requireAdmin: async () => ({ user: { id: "admin-id" }, db }) }),
     "@/lib/signing/email": { sendTransactionalEmail: async (_email, _subject, text) => {
       events.push("email"); assert.ok(text.includes("https://site.example/admin/activate#token_hash=private-token"));
+      return "mailjet-message";
     } },
   });
   const response = await route.POST(new Request("https://site.example/api/admin/invitations", {
     method: "POST", headers: { Origin: "https://site.example" }, body: JSON.stringify({ email: "new@example.invalid" }),
   }));
   assert.equal(response.status, 201);
-  assert.deepEqual(events, ["role", "email"]);
+  assert.deepEqual(events, ["role", "email", "audit"]);
   assert.ok(!(await response.text()).includes("private-token"));
+});
+test("le registre PDF pagine les signatures sans modifier les pages sources", async () => {
+  const { PDFDocument } = require("pdf-lib");
+  const exports = {};
+  const js = ts.transpileModule(fs.readFileSync(path.join(root, "src/lib/admin/registry-pdf.ts"), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  // pdf-lib validates objects with instanceof; keep its inputs in the same VM realm.
+  new Function("exports", "require", js)(exports, require);
+  const { buildRegistryPdf } = exports;
+  const original = await PDFDocument.create();
+  original.addPage([300, 400]);
+  const source = await original.save();
+  const snapshot = Buffer.from(source);
+  const row = {
+    structure: "Association de protection de l’enfance", type: "Association",
+    representative: "Émilie Dupont", role: "Présidente", signedAt: "2026-11-01T12:00:00Z", version: "Proposition - v1",
+  };
+  const rows = Array.from({ length: 101 }, (_, index) => ({ ...row, structure: `${index + 1} ${row.structure}` }));
+  const standalone = await buildRegistryPdf(rows);
+  const combined = await buildRegistryPdf(rows, source);
+  const registry = await PDFDocument.load(standalone.bytes);
+  const appendix = await PDFDocument.load(combined.bytes);
+  assert.ok(registry.getPageCount() > 1);
+  assert.equal(appendix.getPageCount(), registry.getPageCount() + 1);
+  assert.equal(appendix.getPage(0).getWidth(), 300);
+  assert.equal(appendix.getPage(0).getHeight(), 400);
+  assert.deepEqual(Buffer.from(source), snapshot);
+  const long = await buildRegistryPdf([{ ...row, structure: "A".repeat(12000) }]);
+  assert.ok(long.registryPages > 1);
+  const empty = await buildRegistryPdf([]);
+  assert.equal(empty.registryPages, 1);
+  await assert.rejects(buildRegistryPdf([{ ...row, signedAt: "invalid" }]));
+});
+test("l’export PDF lit toutes les pages et filtre les preuves finalisees par version", async () => {
+  const auth = authFixture().auth;
+  const calls = [];
+  let exportedRows;
+  let audit;
+  const db = {
+    from: table => {
+      if (table === "audit_logs") return { insert: async entry => { audit = entry; return { error: null }; } };
+      assert.equal(table, "signatures");
+      const query = {
+        select: () => query,
+        eq: (key, value) => { calls.push(["eq", key, value]); return query; },
+        not: (key, operator, value) => { calls.push(["not", key, operator, value]); return query; },
+        order: key => { calls.push(["order", key]); return query; },
+        range: (start, end) => { calls.push(["range", start, end]); return query; },
+        then: resolve => resolve({ data: calls.filter(call => call[0] === "range").length === 1
+          ? Array.from({ length: 500 }, () => ({
+            signed_at: "2026-11-01T12:00:00Z",
+            signatory: { organization_name: "Test", organization_type: "Association", representative_name: "Test", representative_role: "Test" },
+            document: { title: "Proposition", version: "v1" },
+          })) : [], error: null }),
+      };
+      return query;
+    },
+  };
+  const route = load("src/app/api/admin/export/pdf/route.ts", {
+    "@/lib/admin/http": httpFixture({ ...auth, requireAdmin: async () => ({ user: { id: "admin-id" }, db }) }),
+    "@/lib/admin/auth": auth,
+    "@/lib/admin/registry-pdf": { buildRegistryPdf: async rows => {
+      exportedRows = rows; return { bytes: Buffer.from("%PDF-test"), registryPages: 10 };
+    } },
+    "@/lib/signing/security": {},
+  });
+  const id = "10000000-0000-4000-8000-000000000001";
+  const response = await route.GET(new Request(`https://site.example/api/admin/export/pdf?documentId=${id}`));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Content-Type"), "application/pdf");
+  assert.equal(response.headers.get("Cache-Control"), "private, no-store");
+  assert.equal(exportedRows.length, 500);
+  assert.deepEqual(calls.filter(call => call[0] === "range"), [["range", 0, 499], ["range", 500, 999]]);
+  for (const key of ["email_verified_at", "signed_at", "signed_pdf_path", "signed_pdf_hash"]) {
+    assert.ok(calls.some(call => call[0] === "not" && call[1] === key));
+  }
+  assert.ok(calls.some(call => call[0] === "eq" && call[1] === "document_id" && call[2] === id));
+  assert.ok(calls.some(call => call[0] === "eq" && call[1] === "status" && call[2] === "signed"));
+  assert.equal(audit.metadata.count, 500);
+  assert.equal(audit.action, "signatures.pdf_exported");
+  assert.equal((await route.GET(new Request("https://site.example/api/admin/export/pdf?format=appendix"))).status, 400);
 });
 test("seules les signatures complètes peuvent proposer la publication", () => {
   const { canPublish } = load("src/lib/admin/types.ts");

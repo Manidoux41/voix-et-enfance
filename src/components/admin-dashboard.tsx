@@ -106,6 +106,18 @@ export function AdminDashboard({ email, userId }: { email: string; userId: strin
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }, "Registre exporté. Ce fichier contient des données personnelles : conservez-le dans un espace privé.");
   }
+  async function exportPdf(format: "registry" | "appendix", documentId?: string) {
+    await perform(async () => {
+      const params = new URLSearchParams({ format });
+      if (documentId) params.set("documentId", documentId);
+      const response = await fetch(`/api/admin/export/pdf?${params}`, { cache: "no-store" });
+      if (!response.ok) throw new Error((await response.json()).error);
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url; link.download = format === "appendix" ? "proposition-avec-signataires.pdf" : "registre-signatures.pdf"; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, "PDF privé exporté. Les preuves signées originales n’ont pas été modifiées.");
+  }
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -159,6 +171,7 @@ export function AdminDashboard({ email, userId }: { email: string; userId: strin
         <div className="field"><label htmlFor="registry-search">Rechercher une structure</label><input id="registry-search" maxLength={200} value={draftSearch} onChange={event => setDraftSearch(event.target.value)} /></div>
         <div className="field"><label htmlFor="registry-status">Statut</label><select id="registry-status" value={status} onChange={event => { setStatus(event.target.value); setPage(1); }}><option value="all">Toutes les demandes</option><option value="published">Publiées</option>{["signed","pending_signature","submitted","rejected","withdrawn"].map(value => <option value={value} key={value}>{statuses[value]}</option>)}</select></div>
         <button className="btn btn-outline">Rechercher</button><button type="button" className="btn btn-outline" disabled={busy} onClick={exportCsv}>Exporter tout le registre CSV</button>
+        <button type="button" className="btn btn-outline" disabled={busy} onClick={() => void exportPdf("registry")}>Toutes les signatures finalisées : PDF</button>
       </form>
     </>}
     {loading ? <p role="status">Chargement…</p> : !error && <>
@@ -200,6 +213,8 @@ export function AdminDashboard({ email, userId }: { email: string; userId: strin
             <h3>{doc.title} — {doc.version} {doc.is_active && <span className="status">Version active</span>}</h3>
             <p className="muted">{date(doc.created_at)}</p><code className="admin-hash">{doc.sha256_hash}</code>
             <div className="admin-actions"><a className="btn btn-outline" href={`/api/documents/pdf?id=${doc.id}`} target="_blank" rel="noreferrer">Consulter le PDF</a>
+              <button type="button" className="btn btn-outline" disabled={busy} onClick={() => void exportPdf("registry", doc.id)}>Registre PDF de cette version</button>
+              <button type="button" className="btn btn-outline" disabled={busy} onClick={() => void exportPdf("appendix", doc.id)}>Proposition avec tableau en annexe</button>
               <button type="button" className="btn btn-primary" disabled={busy || doc.is_active} onClick={() => {
                 if (window.confirm(`Activer la version ${doc.version} pour les nouvelles signatures et la page publique ?`)) void perform(() => api("documents", json("PATCH", { id: doc.id })), "Document actif modifié.");
               }}>Activer cette version</button></div>
