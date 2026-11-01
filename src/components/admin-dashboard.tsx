@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { canPublish, type AdminItem, type AuditItem, type DocumentItem, type Paged, type Signatory } from "@/lib/admin/types";
 import { pageLabels, type ContentPage, type ContentRecord } from "@/lib/content-fields";
 
-type Tab = "signatories" | "documents" | "users" | "content" | "audit";
+type Tab = "signatories" | "documents" | "users" | "content" | "audit" | "account";
 type Registry = Paged<Signatory> & { metrics: { total: number; signed: number; published: number } };
-const tabs: Record<Tab, string> = { signatories: "Signatures", documents: "Documents PDF", users: "Comptes autorisés", content: "Contenus des pages", audit: "Journal d’audit" };
+const tabs: Record<Tab, string> = { signatories: "Signatures", documents: "Documents PDF", users: "Comptes autorisés", content: "Contenus des pages", audit: "Journal d’audit", account: "Mon compte" };
 const statuses: Record<string, string> = { signed: "Signée", pending_signature: "En attente de signature", submitted: "Soumise", rejected: "Rejetée", withdrawn: "Retirée", otp_pending: "Code envoyé", verified: "E-mail vérifié", expired: "Expirée", not_started: "Non commencée" };
 const fieldLabels: Record<string, string> = {
   title: "Titre principal", introduction: "Introduction", eyebrow: "Surtitre",
@@ -120,6 +120,22 @@ export function AdminDashboard({ email, userId }: { email: string; userId: strin
     const saved = await perform(() => api("users", json("POST", { userId: fields.get("userId"), role: "admin" })), "Compte administrateur autorisé.");
     if (saved) form.reset();
   }
+  async function invite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const fields = new FormData(form);
+    const saved = await perform(() => api("invitations", json("POST", { email: fields.get("email") })), "Invitation administrateur envoyée. Le destinataire choisira son mot de passe par e-mail.");
+    if (saved) form.reset();
+  }
+  async function changePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const fields = new FormData(form);
+    const saved = await perform(() => api("password", json("PUT", {
+      currentPassword: fields.get("currentPassword"), password: fields.get("password"), confirmation: fields.get("confirmation"),
+    })), "Votre mot de passe a été modifié.");
+    if (saved) form.reset();
+  }
   const count = tab === "signatories" ? registry?.count : tab === "documents" ? documents?.count : tab === "users" ? users?.count : audit?.count;
   const currentContent = content.find(item => item.page === contentPage);
 
@@ -191,6 +207,11 @@ export function AdminDashboard({ email, userId }: { email: string; userId: strin
         </div>
       </>}
       {tab === "users" && <>
+        <form className="panel" onSubmit={invite}><h2>Créer un administrateur par invitation</h2>
+          <p className="notice">Le destinataire recevra un lien personnel pour confirmer son adresse et choisir son mot de passe. Il disposera de tous les droits administrateur.</p>
+          <div className="field"><label htmlFor="invited-email">Adresse e-mail</label><input id="invited-email" name="email" type="email" required maxLength={254} /></div>
+          <button className="btn btn-primary" disabled={busy}>Envoyer l’invitation</button>
+        </form>
         <form className="panel" onSubmit={authorize}><h2>Autoriser un administrateur</h2><p className="notice">Créez d’abord un compte avec e-mail confirmé dans Supabase → Authentication → Users, puis copiez son identifiant UUID ici. Aucune inscription administrateur publique.</p>
           <div className="field"><label htmlFor="authorized-user">Identifiant UUID du compte Supabase</label><input id="authorized-user" name="userId" required pattern="[0-9a-fA-F-]{36}" /></div><button className="btn btn-primary" disabled={busy}>Autoriser ce compte</button>
         </form>
@@ -205,6 +226,14 @@ export function AdminDashboard({ email, userId }: { email: string; userId: strin
           </div></td></tr>)}
         </tbody></table></div></div>
       </>}
+      {tab === "account" && <form className="panel" onSubmit={changePassword}>
+        <h2>Modifier mon mot de passe</h2>
+        <p className="notice">Le nouveau mot de passe doit comporter 12 à 128 caractères, avec majuscule, minuscule, chiffre et symbole.</p>
+        <div className="field"><label htmlFor="account-current-password">Mot de passe actuel</label><input id="account-current-password" name="currentPassword" type="password" autoComplete="current-password" required maxLength={256} /></div>
+        <div className="field"><label htmlFor="account-password">Nouveau mot de passe</label><input id="account-password" name="password" type="password" autoComplete="new-password" minLength={12} maxLength={128} required /></div>
+        <div className="field"><label htmlFor="account-confirmation">Confirmer le nouveau mot de passe</label><input id="account-confirmation" name="confirmation" type="password" autoComplete="new-password" minLength={12} maxLength={128} required /></div>
+        <button className="btn btn-primary" disabled={busy}>Modifier mon mot de passe</button>
+      </form>}
       {tab === "content" && <div className="panel"><h2>Modifier les pages publiques</h2>
         <div className="field"><label htmlFor="content-page">Page</label><select id="content-page" value={contentPage} onChange={event => {
           const value = event.target.value;
@@ -217,7 +246,7 @@ export function AdminDashboard({ email, userId }: { email: string; userId: strin
           {audit.items.map(item => <tr key={item.id}><td>{date(item.created_at)}</td><td>{item.action}</td><td>{item.actor_id ?? "Parcours public"}<br />{item.entity_type}<br />{item.entity_id}</td><td><pre className="admin-metadata">{JSON.stringify(item.metadata, null, 2)}</pre></td></tr>)}
         </tbody></table></div>}
       </div>}
-      {tab !== "content" && <div className="admin-toolbar"><p className="muted">{count ?? 0} résultats — page {page}</p><div className="admin-actions">
+      {tab !== "content" && tab !== "account" && <div className="admin-toolbar"><p className="muted">{count ?? 0} résultats — page {page}</p><div className="admin-actions">
         <button type="button" className="btn btn-outline" disabled={busy || page === 1} onClick={() => setPage(value => value - 1)}>Précédente</button><button type="button" className="btn btn-outline" disabled={busy || page * 25 >= (count ?? 0)} onClick={() => setPage(value => value + 1)}>Suivante</button>
       </div></div>}
     </>}

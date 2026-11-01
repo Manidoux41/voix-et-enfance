@@ -110,9 +110,11 @@ test("toutes les routes métier refusent l'accès anonyme avant la base", async 
     "@/lib/admin/csv": load("src/lib/admin/csv.ts"),
     "@/lib/signing/security": { sha256() { throw new Error("unexpected hash"); } },
     "@/lib/content-fields": load("src/lib/content-fields.ts"),
+    "@/lib/admin/password": load("src/lib/admin/password.ts"),
+    "@/lib/signing/email": { sendTransactionalEmail() { throw new Error("unexpected email"); } },
     "next/server": { NextResponse },
   };
-  for (const file of ["signatories", "signatures/download", "documents", "users", "content", "export", "audit"]) {
+  for (const file of ["signatories", "signatures/download", "documents", "users", "content", "export", "audit", "invitations", "password"]) {
     const route = load(`src/app/api/admin/${file}/route.ts`, mocks);
     for (const method of ["GET","POST","PUT","PATCH","DELETE"]) {
       if (typeof route[method] !== "function") continue;
@@ -121,6 +123,144 @@ test("toutes les routes métier refusent l'accès anonyme avant la base", async 
     }
   }
   assert.equal(fixture.checks(), 0);
+});
+test("l’origine Vercel est utilisee seulement depuis les variables de confiance", () => {
+  const { auth } = authFixture({ env: {
+    NEXT_PUBLIC_APP_URL: "", VERCEL: "1", VERCEL_ENV: "production",
+    VERCEL_PROJECT_PRODUCTION_URL: "site.example", VERCEL_URL: "preview.example",
+  } });
+  assert.equal(auth.adminOrigin(), "https://site.example");
+  assert.throws(() => auth.requireSameOrigin(new Request("https://attacker.example", {
+    method: "POST", headers: { Origin: "https://attacker.example" },
+  })), error => error.status === 403);
+  assert.equal(authFixture({ env: {
+    NEXT_PUBLIC_APP_URL: "", VERCEL: "1", VERCEL_ENV: "preview", VERCEL_URL: "preview.example",
+  } }).auth.adminOrigin(), "https://preview.example");
+  for (const env of [{ NEXT_PUBLIC_APP_URL: "" }, { NEXT_PUBLIC_APP_URL: "invalid" },
+    { NEXT_PUBLIC_APP_URL: "http://site.example", NODE_ENV: "production" }]) {
+    assert.throws(() => authFixture({ env }).auth.adminOrigin(), error => error.status === 503);
+  }
+});
+
+test("les nouveaux mots de passe sont robustes et confirmes", () => {
+  const { passwordFields } = load("src/lib/admin/password.ts");
+  const password = "Example-Password123!";
+  assert.equal(passwordFields.safeParse({ password, confirmation: password }).success, true);
+  for (const value of ["short", "onlylowercasepassword", "ALLUPPERCASE123!", "WithoutDigits!", "NoSymbols123456"]) {
+    assert.equal(passwordFields.safeParse({ password: value, confirmation: value }).success, false);
+  }
+  assert.equal(passwordFields.safeParse({ password, confirmation: "different" }).success, false);
+});
+
+function accountRoute(file, { db, client, user = { id: "admin-id", email: "admin@example.invalid" } }) {
+  const auth = authFixture().auth;
+  return load(`src/app/api/admin/${file}/route.ts`, {
+    "@/lib/admin/auth": { ...auth, createSessionClient: async () => client },
+    "@/lib/admin/password": load("src/lib/admin/password.ts"),
+    "@/lib/admin/http": httpFixture({ ...auth, requireAdmin: async () => ({ db, user }) }),
+  });
+}
+const accountRequest = (path, body) => new Request(`https://site.example/api/admin/${path}`, {
+  method: "PUT", headers: { Origin: "https://site.example", "Content-Type": "application/json" }, body: JSON.stringify(body),
+});
+test("le changement de mot de passe reauthentifie le compte et ne journalise aucun secret", async () => {
+  let updated = false;
+  let audit;
+  const fields = { currentPassword: "Old-password123!", password: "New-password123!", confirmation: "New-password123!" };
+  const route = accountRoute("password", {
+    client: { auth: {
+      signInWithPassword: async credentials => { assert.equal(credentials.email, "admin@example.invalid"); assert.equal(credentials.password, fields.currentPassword); return { error: null }; },
+      updateUser: async credentials => { updated = true; assert.equal(credentials.password, fields.password); return { error: null }; },
+    } },
+    db: { from: table => { assert.equal(table, "audit_logs"); return { insert: async entry => { audit = entry; return { error: null }; } }; } },
+  });
+  assert.equal((await route.PUT(accountRequest("password", fields))).status, 200);
+  assert.equal(updated, true);
+  assert.equal(audit.action, "admin.password_changed");
+  assert.ok(!JSON.stringify(audit).includes("password123"));
+});
+test("un ancien mot de passe incorrect ou une confirmation invalide ne modifie rien", async () => {
+  let updates = 0;
+  const route = accountRoute("password", {
+    db: {},
+    client: { auth: {
+      signInWithPassword: async () => ({ error: new Error("invalid credentials") }),
+      updateUser: async () => { updates++; return { error: null }; },
+    } },
+  });
+  const fields = { currentPassword: "wrong", password: "New-password123!", confirmation: "New-password123!" };
+  assert.equal((await route.PUT(accountRequest("password", fields))).status, 401);
+  assert.equal((await route.PUT(accountRequest("password", { ...fields, confirmation: "different" }))).status, 400);
+  assert.equal(updates, 0);
+});
+
+function activationRoute({ otpError = null, roleError = null } = {}) {
+  let updates = 0;
+  let signouts = 0;
+  const auth = authFixture().auth;
+  const client = { auth: {
+    verifyOtp: async input => { assert.equal(input.type, "invite"); return { error: otpError }; },
+    updateUser: async () => { updates++; return { error: null }; },
+    signOut: async () => { signouts++; return { error: null }; },
+  } };
+  const route = load("src/app/api/admin/activate/route.ts", {
+    "@/lib/admin/password": load("src/lib/admin/password.ts"),
+    "@/lib/admin/auth": {
+      ...auth, createSessionClient: async () => client,
+      requireAdmin: async () => {
+        if (roleError) throw new auth.AdminError("Accès refusé.", 403);
+        return { user: { id: "admin-id" }, db: { from: () => ({ insert: async () => ({ error: null }) }) } };
+      },
+    },
+  });
+  return { route, updates: () => updates, signouts: () => signouts };
+}
+function activationRequest() {
+  return new Request("https://site.example/api/admin/activate", {
+    method: "POST", headers: { Origin: "https://site.example" },
+    body: JSON.stringify({ tokenHash: "test-token", password: "New-password123!", confirmation: "New-password123!" }),
+  });
+}
+test("un lien valide active uniquement un compte encore autorise", async () => {
+  const fixture = activationRoute();
+  assert.equal((await fixture.route.POST(activationRequest())).status, 200);
+  assert.equal(fixture.updates(), 1);
+});
+test("une invitation expiree ou revoquee ne permet pas de changer le mot de passe", async () => {
+  for (const options of [{ otpError: new Error("expired") }, { roleError: true }]) {
+    const fixture = activationRoute(options);
+    const response = await fixture.route.POST(activationRequest());
+    assert.equal(response.status, options.roleError ? 403 : 400);
+    assert.equal(fixture.updates(), 0);
+    if (options.roleError) assert.equal(fixture.signouts(), 1);
+  }
+});
+test("une invitation est autorisee avant son envoi et ne divulgue pas son lien dans la reponse", async () => {
+  const events = [];
+  const auth = authFixture().auth;
+  const db = {
+    auth: { admin: { generateLink: async input => {
+      assert.equal(input.type, "invite");
+      return { data: { user: { id: "invited-id" }, properties: { hashed_token: "private-token" } }, error: null };
+    } } },
+    rpc: async (name, input) => {
+      assert.equal(name, "set_site_admin"); assert.equal(input.target, "invited-id"); assert.equal(input.actor, "admin-id");
+      events.push("role"); return { error: null };
+    },
+  };
+  const route = load("src/app/api/admin/invitations/route.ts", {
+    "@/lib/admin/auth": auth,
+    "@/lib/admin/http": httpFixture({ ...auth, requireAdmin: async () => ({ user: { id: "admin-id" }, db }) }),
+    "@/lib/signing/email": { sendTransactionalEmail: async (_email, _subject, text) => {
+      events.push("email"); assert.ok(text.includes("https://site.example/admin/activate#token_hash=private-token"));
+    } },
+  });
+  const response = await route.POST(new Request("https://site.example/api/admin/invitations", {
+    method: "POST", headers: { Origin: "https://site.example" }, body: JSON.stringify({ email: "new@example.invalid" }),
+  }));
+  assert.equal(response.status, 201);
+  assert.deepEqual(events, ["role", "email"]);
+  assert.ok(!(await response.text()).includes("private-token"));
 });
 test("seules les signatures complètes peuvent proposer la publication", () => {
   const { canPublish } = load("src/lib/admin/types.ts");

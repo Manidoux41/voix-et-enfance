@@ -36,9 +36,25 @@ export async function requireAdmin(writable = false) {
   return { user, db };
 }
 
-export function requireSameOrigin(request: Request) {
-  const origin = request.headers.get("origin");
-  const expected = process.env.NEXT_PUBLIC_APP_URL;
+export function adminOrigin() {
+  const vercelHost = process.env.VERCEL === "1"
+    ? process.env.VERCEL_ENV === "production"
+      ? process.env.VERCEL_PROJECT_PRODUCTION_URL
+      : process.env.VERCEL_URL
+    : undefined;
+  const expected = process.env.NEXT_PUBLIC_APP_URL || (vercelHost ? `https://${vercelHost}` : undefined);
   if (!expected) throw new AdminError("NEXT_PUBLIC_APP_URL doit être configurée pour protéger les opérations administratives.", 503);
-  if (!origin || origin !== new URL(expected).origin) throw new AdminError("Origine de la requête refusée.", 403);
+  let url;
+  try { url = new URL(expected); }
+  catch { throw new AdminError("NEXT_PUBLIC_APP_URL doit être une URL valide.", 503); }
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password
+    || (process.env.NODE_ENV === "production" && url.protocol !== "https:")) {
+    throw new AdminError("L’URL du site doit utiliser HTTPS en production, sans identifiants.", 503);
+  }
+  return url.origin;
+}
+
+export function requireSameOrigin(request: Request) {
+  const expected = adminOrigin();
+  if (request.headers.get("origin") !== expected) throw new AdminError("Origine de la requête refusée.", 403);
 }
