@@ -18,7 +18,7 @@ function load(file, mocks = {}, env = {}) {
   });
   return exports;
 }
-  function emailFixture(response, env = { BREVO_API_KEY: "test-api-key", EMAIL_FROM: "sender@example.invalid" }) {
+  function emailFixture(response, env = { MAILJET_API_KEY: "test-api-key", MAILJET_SECRET_KEY: "test-secret-key", EMAIL_FROM: "sender@example.invalid" }) {
     const exports = {};
     let calls = 0;
     const logs = [];
@@ -28,43 +28,59 @@ function load(file, mocks = {}, env = {}) {
     vm.runInNewContext(js, {
       exports, require: name => name === "server-only" ? {} : require(name),
       process: { env }, console: { error: (...args) => logs.push(args), info: (...args) => logs.push(args) },
+      Buffer,
       fetch: async (_url, options) => {
         calls++;
-        assert.equal(options.headers["api-key"], env.BREVO_API_KEY);
+        assert.equal(_url, "https://api.mailjet.com/v3.1/send");
+        assert.equal(options.headers.Authorization, `Basic ${Buffer.from(`${env.MAILJET_API_KEY}:${env.MAILJET_SECRET_KEY}`).toString("base64")}`);
         const body = JSON.parse(options.body);
-        assert.equal(body.sender.email, env.EMAIL_FROM);
-        assert.ok(body.textContent.includes("123456"));
+        assert.equal(body.SandboxMode, undefined);
+        assert.equal(body.Messages.length, 1);
+        assert.equal(body.Messages[0].From.Email, env.EMAIL_FROM);
+        assert.equal(body.Messages[0].To[0].Email, "recipient@example.invalid");
+        assert.ok(body.Messages[0].TextPart.includes("123456"));
         return response;
       },
     });
     return { email: exports, calls: () => calls, logs };
   }
-  test("Brevo doit confirmer le code par un identifiant de message sans journaliser de secrets", async () => {
-    const fixture = emailFixture(Response.json({ messageId: "test-message-id" }, { status: 201 }));
+  function mailjetSuccess(overrides = {}) {
+    return { Messages: [{ Status: "success", To: [{ Email: "recipient@example.invalid", MessageUUID: "test-message-id", MessageID: 456 }], ...overrides }] };
+  }
+  test("Mailjet doit confirmer le code par un identifiant de message sans journaliser de secrets", async () => {
+    const fixture = emailFixture(Response.json(mailjetSuccess(), { status: 200 }));
     assert.equal(await fixture.email.sendOtpEmail("recipient@example.invalid", "123456", "Test"), "test-message-id");
     assert.equal(fixture.calls(), 1);
     const logs = JSON.stringify(fixture.logs);
     assert.ok(logs.includes("test-message-id"));
-    for (const privateValue of ["123456", "test-api-key", "recipient@example.invalid"]) {
+    for (const privateValue of ["123456", "test-api-key", "test-secret-key", "recipient@example.invalid"]) {
       assert.ok(!logs.includes(privateValue));
     }
   });
-  test("Brevo refuse explicitement les echecs HTTP et les succes sans confirmation", async () => {
+  test("Mailjet refuse explicitement les echecs HTTP et les succes sans confirmation", async () => {
     for (const response of [
       Response.json({ message: "private-provider-details" }, { status: 401 }),
       Response.json({}, { status: 201 }),
-      Response.json({ messageId: " " }, { status: 201 }),
+      Response.json(mailjetSuccess({ Status: "error", Errors: [{ ErrorMessage: "private-provider-details" }] }), { status: 200 }),
+      Response.json(mailjetSuccess({ To: [] }), { status: 200 }),
+      Response.json(mailjetSuccess({ To: [{ Email: "recipient@example.invalid", MessageUUID: " " }] }), { status: 200 }),
+      Response.json(mailjetSuccess({ To: [{ Email: "other@example.invalid", MessageUUID: "test-message-id" }] }), { status: 200 }),
+      Response.json({ Messages: [] }, { status: 200 }),
       new Response("invalid-json", { status: 200 }),
     ]) {
       const fixture = emailFixture(response);
       await assert.rejects(fixture.email.sendOtpEmail("recipient@example.invalid", "123456", "Test"));
       assert.ok(!JSON.stringify(fixture.logs).includes("private-provider-details"));
     }
-    const fixture = emailFixture(null, {});
-    await assert.rejects(fixture.email.sendOtpEmail("recipient@example.invalid", "123456", "Test"));
-    assert.equal(fixture.calls(), 0);
+    for (const env of [{}, { MAILJET_API_KEY: "key", EMAIL_FROM: "sender@example.invalid" },
+      { MAILJET_SECRET_KEY: "secret", EMAIL_FROM: "sender@example.invalid" },
+      { MAILJET_API_KEY: "key", MAILJET_SECRET_KEY: "secret" }]) {
+      const fixture = emailFixture(null, env);
+      await assert.rejects(fixture.email.sendOtpEmail("recipient@example.invalid", "123456", "Test"));
+      assert.equal(fixture.calls(), 0);
+    }
   });
-  test("la demande enregistre la reference Brevo et ne confirme pas un envoi refuse", async () => {
+  test("la demande enregistre la reference Mailjet et ne confirme pas un envoi refuse", async () => {
     for (const rejected of [false, true]) {
       let audit;
       const route = load("src/app/api/signatories/route.ts", {

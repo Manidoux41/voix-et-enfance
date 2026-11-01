@@ -39,7 +39,7 @@ export const contentDefaults = {
     title: "Informations et confidentialité",
     introduction: "Informations à compléter par le responsable de l'initiative avant toute ouverture publique.",
     privacyTitle: "Protection des données",
-    privacyText: "Les demandes et les signatures sont enregistrées dans Supabase. Brevo est utilisé pour l'envoi des codes de vérification par e-mail. Seuls le nom et le type des structures validées sont publiés. Les coordonnées des représentants et les PDF signés restent privés. Le responsable de traitement doit compléter les finalités, la base légale, les destinataires, les durées de conservation, les droits des personnes et les coordonnées de contact avant toute collecte publique.",
+    privacyText: "Les demandes et les signatures sont enregistrées dans Supabase. Mailjet est utilisé pour l'envoi des codes de vérification par e-mail. Seuls le nom et le type des structures validées sont publiés. Les coordonnées des représentants et les PDF signés restent privés. Le responsable de traitement doit compléter les finalités, la base légale, les destinataires, les durées de conservation, les droits des personnes et les coordonnées de contact avant toute collecte publique.",
     publisherTitle: "Mentions légales",
     publisherText: "Éditeur, hébergeur et coordonnées de contact à compléter par le porteur de l'initiative avant publication.",
   },
