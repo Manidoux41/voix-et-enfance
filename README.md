@@ -186,6 +186,7 @@ L'article 25 du règlement eIDAS interdit de refuser à une signature un effet j
 
 - Statistiques, recherche par nom de structure, filtres et pagination des demandes.
 - Publication et retrait du registre public. Une publication exige une signature finalisée, un e-mail vérifié et une preuve PDF enregistrée. Seuls le nom et le type de la structure apparaissent dans le registre public ; les signatures antérieures finalisées peuvent être publiées individuellement.
+- La page « Signataires » met en évidence le total des signatures finalisées publiées, calculé sur tout le registre indépendamment de la pagination. Il compte les structures représentées, pas les personnes uniques ; les demandes en attente et les soutiens non publiés sont exclus.
 - Téléchargement des PDF signés par liens privés temporaires (60 secondes). Ne pas partager ces liens ; les coordonnées et les PDF ne sont jamais affichés dans le registre public.
 - Export CSV de l'ensemble du registre, y compris les données personnelles : stockage privé obligatoire. Les formules de tableur sont neutralisées.
 - Export PDF privé de toutes les signatures finalisées depuis « Signatures », sans restriction aux structures publiées ni aux filtres de recherche. Le tableau comporte structure, type, représentant, fonction, date UTC et version signée, classés par date de signature croissante. Les codes en attente et les signatures sans preuve finalisée sont exclus.
