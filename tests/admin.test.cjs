@@ -14,10 +14,100 @@ function load(file, mocks = {}, env = {}) {
   }).outputText;
   vm.runInNewContext(js, {
     exports, require: name => name === "server-only" ? {} : name in mocks ? mocks[name] : require(name),
-    process: { env }, console: { error() {} }, Request, Response, Buffer, URL, File, FormData,
+    process: { env }, console: { error() {}, info() {} }, Request, Response, Buffer, URL, File, FormData,
   });
   return exports;
 }
+  function emailFixture(response, env = { BREVO_API_KEY: "test-api-key", EMAIL_FROM: "sender@example.invalid" }) {
+    const exports = {};
+    let calls = 0;
+    const logs = [];
+    const js = ts.transpileModule(fs.readFileSync(path.join(root, "src/lib/signing/email.ts"), "utf8"), {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    }).outputText;
+    vm.runInNewContext(js, {
+      exports, require: name => name === "server-only" ? {} : require(name),
+      process: { env }, console: { error: (...args) => logs.push(args), info: (...args) => logs.push(args) },
+      fetch: async (_url, options) => {
+        calls++;
+        assert.equal(options.headers["api-key"], env.BREVO_API_KEY);
+        const body = JSON.parse(options.body);
+        assert.equal(body.sender.email, env.EMAIL_FROM);
+        assert.ok(body.textContent.includes("123456"));
+        return response;
+      },
+    });
+    return { email: exports, calls: () => calls, logs };
+  }
+  test("Brevo doit confirmer le code par un identifiant de message sans journaliser de secrets", async () => {
+    const fixture = emailFixture(Response.json({ messageId: "test-message-id" }, { status: 201 }));
+    assert.equal(await fixture.email.sendOtpEmail("recipient@example.invalid", "123456", "Test"), "test-message-id");
+    assert.equal(fixture.calls(), 1);
+    const logs = JSON.stringify(fixture.logs);
+    assert.ok(logs.includes("test-message-id"));
+    for (const privateValue of ["123456", "test-api-key", "recipient@example.invalid"]) {
+      assert.ok(!logs.includes(privateValue));
+    }
+  });
+  test("Brevo refuse explicitement les echecs HTTP et les succes sans confirmation", async () => {
+    for (const response of [
+      Response.json({ message: "private-provider-details" }, { status: 401 }),
+      Response.json({}, { status: 201 }),
+      Response.json({ messageId: " " }, { status: 201 }),
+      new Response("invalid-json", { status: 200 }),
+    ]) {
+      const fixture = emailFixture(response);
+      await assert.rejects(fixture.email.sendOtpEmail("recipient@example.invalid", "123456", "Test"));
+      assert.ok(!JSON.stringify(fixture.logs).includes("private-provider-details"));
+    }
+    const fixture = emailFixture(null, {});
+    await assert.rejects(fixture.email.sendOtpEmail("recipient@example.invalid", "123456", "Test"));
+    assert.equal(fixture.calls(), 0);
+  });
+  test("la demande enregistre la reference Brevo et ne confirme pas un envoi refuse", async () => {
+    for (const rejected of [false, true]) {
+      let audit;
+      const route = load("src/app/api/signatories/route.ts", {
+        "@/lib/validators/signatory": load("src/lib/validators/signatory.ts"),
+        "@/lib/signing/security": { createOtp: () => "123456", hashOtp: () => "hashed-otp" },
+        "@/lib/signing/email": { sendOtpEmail: async () => {
+          if (rejected) throw new Error("Envoi refusé");
+          return "test-message-id";
+        } },
+        "@/lib/supabase/server": { createSupabaseAdmin: () => ({
+          from: table => {
+            if (table === "documents") return { select: () => ({ eq: () => ({ eq: () => ({
+              single: async () => ({ data: { id: "doc-id", sha256_hash: "doc-hash" }, error: null }),
+            }) }) }) };
+            if (table === "signatories") return { insert: () => ({ select: () => ({
+              single: async () => ({ data: { id: "request-id" }, error: null }),
+            }) }) };
+            if (table === "signatures") return { insert: async () => ({ error: null }) };
+            assert.equal(table, "audit_logs");
+            return { insert: async entry => { audit = entry; return { error: null }; } };
+          },
+        }) },
+      });
+      const response = await route.POST(new Request("https://site.example/api/signatories", {
+        method: "POST", body: JSON.stringify({
+          documentId: "10000000-0000-4000-8000-000000000001",
+          organizationName: "Test", organizationType: "Association",
+          representativeName: "Test", representativeRole: "Test",
+          email: "recipient@example.invalid", hasReadDocument: true, confirmsAuthority: true, confirmsSupport: true,
+        }),
+      }));
+      assert.equal(response.status, rejected ? 503 : 201);
+      const body = await response.json();
+      if (rejected) {
+        assert.equal(audit, undefined);
+        assert.equal(body.status, undefined);
+      } else {
+        assert.equal(body.status, "otp_sent");
+        assert.equal(audit.metadata.email_message_id, "test-message-id");
+        assert.ok(!JSON.stringify(audit).includes("123456"));
+      }
+    }
+  });
 function authFixture({ user = { id: "admin-id", email_confirmed_at: "2026-01-01" }, role = "admin", roleError = null, authError = null, env = {} } = {}) {
   let checks = 0;
   const auth = load("src/lib/admin/auth.ts", {

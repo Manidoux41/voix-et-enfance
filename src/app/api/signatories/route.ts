@@ -29,10 +29,17 @@ export async function POST(request: Request) {
       consent_version: "consent-signature-v1"
     });
     if (sigError) throw sigError;
-    await sendOtpEmail(parsed.data.email, code, parsed.data.organizationName);
-    await supabase.from("audit_logs").insert({ action: "signature.requested", entity_type: "signatory", entity_id: data.id, metadata: { document_id: document.id, document_hash: document.sha256_hash } });
+    const messageId = await sendOtpEmail(parsed.data.email, code, parsed.data.organizationName);
+    const { error: auditError } = await supabase.from("audit_logs").insert({ action: "signature.requested", entity_type: "signatory", entity_id: data.id, metadata: { document_id: document.id, document_hash: document.sha256_hash, email_message_id: messageId } });
+    if (auditError) {
+      console.error("Journalisation de la demande impossible :", { signatoryId: data.id, code: auditError.code });
+      throw new Error("Le courriel a été accepté, mais l’enregistrement de son suivi a échoué. Réessayez ultérieurement.");
+    }
     return NextResponse.json({ id: data.id, status: "otp_sent" }, { status: 201 });
   } catch (error) {
+    console.error("Création de demande ou envoi du code impossible :", {
+      message: error instanceof Error ? error.message : "Erreur de base de données",
+    });
     return NextResponse.json({ error: error instanceof Error ? error.message : "Erreur serveur" }, { status: 503 });
   }
 }

@@ -115,6 +115,12 @@ Générer le secret OTP avec `node -e "console.log(require('node:crypto').random
 
 Ne jamais publier `.env.local` ni des identifiants réels dans `.env.example`. Si des clés ou mots de passe ont déjà été publiés, les révoquer ou les renouveler auprès du fournisseur : nettoyer le fichier ne les supprime pas de l'historique.
 
+### Diagnostic des codes e-mail
+
+La page de saisie du code s'affiche uniquement après confirmation de la prise en charge par Brevo (réponse contenant un `messageId`). Cette acceptation ne garantit pas la livraison. Les logs serveur Vercel contiennent « Courriel accepté par Brevo » et cet identifiant, également enregistré sous `email_message_id` dans l'événement d'audit `signature.requested`. Aucun code OTP ni clé API n'est journalisé.
+
+Si le code n'arrive pas, retrouver cet identifiant dans Vercel puis dans Brevo → Transactionnel → Logs. Vérifier le compte Brevo auquel appartient la clé API de Vercel Production, les filtres de date, les rejets/blocages, l'expéditeur autorisé et les courriers indésirables. Un HTTP 401 signifie que l'authentification est refusée ; une clé locale ne met pas à jour Vercel et toute modification de variable exige un redéploiement. En l'absence d'identifiant côté Vercel, examiner l'erreur serveur plutôt que présumer une livraison.
+
 ### Limites et sécurité avant ouverture publique
 
 - Ce MVP collecte une signature électronique simple, une vérification de contrôle de l'adresse e-mail, le consentement, la version du document et des éléments techniques de traçabilité. Il ne vérifie pas à lui seul l'identité civile ni le mandat du représentant.

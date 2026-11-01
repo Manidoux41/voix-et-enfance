@@ -1,4 +1,5 @@
 import "server-only";
+import { z } from "zod";
 
 export async function sendOtpEmail(
   email: string,
@@ -16,7 +17,7 @@ Il est valable 10 minutes et ne doit être communiqué à personne.
 Si vous n'êtes pas à l'origine de cette demande, ignorez ce message.
 
 L'équipe Voix & Enfance`;
-  await sendTransactionalEmail(email, "Votre code de validation – Voix & Enfance", message);
+  return sendTransactionalEmail(email, "Votre code de validation – Voix & Enfance", message);
 }
 
 export async function sendTransactionalEmail(email: string, subject: string, textContent: string) {
@@ -52,12 +53,24 @@ export async function sendTransactionalEmail(email: string, subject: string, tex
   });
 
   if (!response.ok) {
-    const error = await response.text();
-
-    console.error("Erreur Brevo :", response.status, error);
+    console.error("Envoi refusé par Brevo :", { status: response.status });
 
     throw new Error(
       `Échec de l'envoi du courriel via Brevo (${response.status}).`
     );
   }
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    console.error("Réponse Brevo illisible :", { status: response.status });
+    throw new Error("Le service e-mail n’a pas confirmé la prise en charge du courriel.");
+  }
+  const parsed = z.object({ messageId: z.string().trim().min(1).max(512) }).safeParse(body);
+  if (!parsed.success) {
+    console.error("Réponse Brevo sans identifiant de message :", { status: response.status });
+    throw new Error("Le service e-mail n’a pas confirmé la prise en charge du courriel.");
+  }
+  console.info("Courriel accepté par Brevo :", { messageId: parsed.data.messageId });
+  return parsed.data.messageId;
 }

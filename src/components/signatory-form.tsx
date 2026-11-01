@@ -28,6 +28,7 @@ export function SignatoryForm({ documentId }: { documentId: string }) {
     try {
       const r = await fetch("/api/signatories", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({...payload,documentId,hasReadDocument:true,confirmsAuthority:true,confirmsSupport:true}) });
       const data = await r.json(); if (!r.ok) throw new Error(data.error || "Impossible de créer la demande.");
+      if (data.status !== "otp_sent" || typeof data.id !== "string" || !data.id) throw new Error("Le serveur n’a pas confirmé l’envoi du code.");
       setId(data.id); setStage("otp");
     } catch(e) { setError(e instanceof Error ? e.message : "Erreur inattendue."); } finally { setBusy(false); }
   }
