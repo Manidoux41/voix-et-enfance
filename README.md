@@ -83,9 +83,13 @@ Le projet remplace le stockage local du formulaire par un parcours serveur : cr�
 2. Dans Supabase SQL Editor, exécuter dans l'ordre `supabase/migrations/001_initial_schema.sql`, puis `supabase/migrations/002_electronic_signing.sql`.
 3. Dans Supabase Storage, vérifier la création des buckets privés `signing-documents` et `signed-documents` par la migration. Téléverser `public/documents/proposition-loi-protection-enfance.pdf` dans `signing-documents`, chemin `original/proposition-loi-protection-enfance.pdf`.
 4. Exécuter `supabase/ACTIVATION_SIGNATURES.sql` pour enregistrer la version active du document. Si le PDF est modifié, recalculer son SHA-256 (`shasum -a 256 fichier.pdf` sur macOS), téléverser la nouvelle version et créer une nouvelle ligne `documents` en désactivant l'ancienne.
-5. Copier `.env.example` vers `.env.local` et renseigner `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`, `OTP_HASH_SECRET` (32 caractères aléatoires minimum) et `NEXT_PUBLIC_APP_URL`. Ne jamais placer `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY` ou `OTP_HASH_SECRET` dans une variable `NEXT_PUBLIC_` ni les transmettre au navigateur.
+5. Copier `.env.example` vers `.env.local` uniquement lors de la première configuration (ne pas écraser un fichier local existant) et renseigner `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `BREVO_API_KEY`, `EMAIL_FROM`, `OTP_HASH_SECRET` (32 caractères aléatoires minimum) et `NEXT_PUBLIC_APP_URL`. Pour Brevo, `EMAIL_FROM` doit contenir uniquement l'adresse e-mail, par exemple `signature@votre-domaine.fr`, sans nom ni chevrons. Ne jamais placer `SUPABASE_SERVICE_ROLE_KEY`, `BREVO_API_KEY` ou `OTP_HASH_SECRET` dans une variable `NEXT_PUBLIC_` ni les transmettre au navigateur.
 6. Déclarer les mêmes variables dans Vercel (Production, Preview si nécessaire), puis redéployer.
-7. Vérifier le domaine expéditeur Resend avant d'envoyer des codes à des signataires réels.
+7. Faire valider le compte Brevo pour l'envoi et authentifier le domaine expéditeur avant d'envoyer des codes à des signataires réels.
+
+Générer le secret OTP avec `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"` et conserver sa valeur pendant la durée de validité des codes : le changer rend les codes en attente invalides. Le secret local n'est pas automatiquement transmis à Vercel ; configurer également `OTP_HASH_SECRET` dans Vercel, puis redéployer.
+
+Ne jamais publier `.env.local` ni des identifiants réels dans `.env.example`. Si des clés ou mots de passe ont déjà été publiés, les révoquer ou les renouveler auprès du fournisseur : nettoyer le fichier ne les supprime pas de l'historique.
 
 ### Limites et sécurité avant ouverture publique
 
