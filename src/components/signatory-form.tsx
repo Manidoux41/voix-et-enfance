@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, LockKeyhole, Eraser, PenLine } from "lucide-react";
 
 type Stage = "details" | "otp" | "sign" | "done";
-export function SignatoryForm() {
+export function SignatoryForm({ documentId }: { documentId: string }) {
   const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
@@ -26,7 +26,7 @@ export function SignatoryForm() {
     const payload = Object.fromEntries(["organizationName","organizationType","representativeName","representativeRole","email","phone","address","website"].map(k => [k, String(f.get(k) || "").trim()]));
     setBusy(true);
     try {
-      const r = await fetch("/api/signatories", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({...payload,hasReadDocument:true,confirmsAuthority:true,confirmsSupport:true}) });
+      const r = await fetch("/api/signatories", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({...payload,documentId,hasReadDocument:true,confirmsAuthority:true,confirmsSupport:true}) });
       const data = await r.json(); if (!r.ok) throw new Error(data.error || "Impossible de créer la demande.");
       setId(data.id); setStage("otp");
     } catch(e) { setError(e instanceof Error ? e.message : "Erreur inattendue."); } finally { setBusy(false); }

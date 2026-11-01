@@ -83,6 +83,21 @@ th { color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:.06
 .metric { background:white; border:1px solid var(--line); border-radius:12px; padding:20px; }
 .metric span { color:var(--muted); font-size:12px; }
 .metric strong { display:block; color:var(--navy); font-size:29px; margin-top:7px; }
+.admin-login { max-width:460px; margin:0 auto; }
+.admin-toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:22px; }
+.admin-toolbar .field { flex:1; min-width:180px; margin:0; }
+.admin-tabs,.admin-actions { display:flex; flex-wrap:wrap; gap:10px; }
+.admin-tabs { margin-bottom:24px; }
+.admin-actions .btn { font-size:12px; padding:10px 12px; }
+.admin-error { border:1px solid #fda29b; background:#fff1f0; color:#b42318; border-radius:10px; padding:14px; }
+.admin-section { margin-top:24px; }
+.admin-document { border-top:1px solid var(--line); padding:20px 0; }
+.admin-document h3 { color:var(--navy); margin:0 0 10px; }
+.admin-hash { display:block; overflow-wrap:anywhere; white-space:normal; margin:10px 0; font-size:12px; }
+.admin-metadata { white-space:pre-wrap; overflow-wrap:anywhere; max-width:320px; }
+.table-wrap td { white-space:normal; min-width:160px; vertical-align:top; overflow-wrap:anywhere; }
+.table-wrap summary { cursor:pointer; color:var(--navy); margin-top:10px; }
+.public-copy { white-space:pre-line; }
 .footer { background:#14263d; color:#d6e0ea; padding:34px 0; margin-top:0; }
 .footer-inner { display:flex; justify-content:space-between; gap:24px; flex-wrap:wrap; }
 .footer small { color:#a9b8c8; line-height:1.7; }

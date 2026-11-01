@@ -1,0 +1,6 @@
+// Prisma manages SQL migrations only; application queries still use Supabase.
+// Keep RLS, auth/storage references, views and functions in migration.sql.
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

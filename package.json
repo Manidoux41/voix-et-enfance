@@ -4,11 +4,18 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/prisma.cjs auto",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:admin": "node --test tests/admin.test.cjs",
+    "test:migrations": "node --test tests/migrations.test.cjs",
+    "db:migrate": "node scripts/prisma.cjs deploy",
+    "db:status": "node scripts/prisma.cjs status",
+    "db:baseline": "node scripts/prisma.cjs baseline"
   },
   "dependencies": {
+    "@next/env": "^15.2.4",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.4",
     "lucide-react": "^0.468.0",
@@ -16,7 +23,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^3.24.2",
-    "pdf-lib": "^1.17.1"
+    "pdf-lib": "^1.17.1",
+    "prisma": "6.19.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

@@ -1,3 +1,15 @@
-export default function AdminPage() {
-  return <><section className="page-top"><div className="container"><h1>Administration</h1><p>Gestion des demandes et des signatures électroniques.</p></div></section><section className="section"><div className="container"><div className="notice">Les demandes sont désormais enregistrées dans Supabase. Avant d’ouvrir cet espace aux administrateurs, il faut activer l’authentification Supabase, restreindre l’accès aux comptes inscrits dans <code>admin_users</code> et remplacer l’ancien tableau local. L’interface d’administration actuelle est volontairement désactivée afin de ne pas exposer les données personnelles des signataires.</div></div></section></>;
+import { redirect } from "next/navigation";
+import { AdminError, requireAdmin } from "@/lib/admin/auth";
+import { AdminDashboard } from "@/components/admin-dashboard";
+export const dynamic = "force-dynamic";
+export const metadata = { title: "Administration — Voix & Enfance", robots: { index: false, follow: false } };
+export default async function AdminPage() {
+  let admin;
+  try { admin = await requireAdmin(); }
+  catch (error) {
+    if (error instanceof AdminError && error.status === 401) redirect("/admin/login");
+    if (error instanceof AdminError && error.status === 403) return <section className="section"><div className="container notice">Accès refusé : ce compte ne possède pas de droits administrateur.</div></section>;
+    throw error;
+  }
+  return <><section className="page-top"><div className="container"><h1>Administration</h1><p>Publication, signatures, documents et gestion du site.</p></div></section><section className="section"><div className="container"><AdminDashboard email={admin.user.email ?? ""} userId={admin.user.id} /></div></section></>;
 }

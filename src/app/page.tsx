@@ -7,22 +7,22 @@ import {
   ArrowRight,
   BookOpen,
 } from "lucide-react";
+import { getSiteContent } from "@/lib/site-content";
 
-export default function HomePage() {
+export const dynamic = "force-dynamic";
+export default async function HomePage() {
+  const content = await getSiteContent("home");
   return (
     <>
       <section className="hero">
         <div className="container hero-grid">
           <div>
             <div className="eyebrow">
-              Initiative interassociative · Protection de l&apos;enfance
+              {content.eyebrow}
             </div>
-            <h1>Faire entendre une voix commune pour l&apos;enfance.</h1>
+            <h1>{content.title}</h1>
             <p>
-              Une proposition de loi portée collectivement pour clarifier les
-              critères du danger justifiant une mesure d&apos;assistance éducative,
-              renforcer le contrôle indépendant et améliorer le pilotage
-              national de la protection de l&apos;enfance.
+              {content.introduction}
             </p>
             <div className="hero-actions">
               <Link href="/proposition" className="btn btn-outline">
@@ -35,33 +35,32 @@ export default function HomePage() {
           </div>
 
           <div className="hero-card">
-            <h3>Une démarche collective</h3>
+            <h3>{content.collectiveTitle}</h3>
             <p>
-              Les associations et collectifs peuvent prendre connaissance du
-              texte puis exprimer le soutien de leur structure.
+              {content.collectiveText}
             </p>
 
             <div className="hero-stat">
               <FileText color="#213d5e" />
               <div>
-                <strong>Un texte commun</strong>
-                <span>Une proposition structurée en cinq articles</span>
+                <strong>{content.textTitle}</strong>
+                <span>{content.textDescription}</span>
               </div>
             </div>
 
             <div className="hero-stat">
               <Users color="#213d5e" />
               <div>
-                <strong>Une mobilisation associative</strong>
-                <span>Chaque structure signe en son nom</span>
+                <strong>{content.mobilizationTitle}</strong>
+                <span>{content.mobilizationDescription}</span>
               </div>
             </div>
 
             <div className="hero-stat">
               <ShieldCheck color="#213d5e" />
               <div>
-                <strong>Une démarche transparente</strong>
-                <span>Consultation du document avant soutien</span>
+                <strong>{content.transparencyTitle}</strong>
+                <span>{content.transparencyDescription}</span>
               </div>
             </div>
           </div>
@@ -71,11 +70,9 @@ export default function HomePage() {
       <section className="section">
         <div className="container">
           <div className="section-heading">
-            <h2>Les objectifs de l&apos;initiative</h2>
+            <h2>{content.objectivesTitle}</h2>
             <p>
-              Le texte soumis à la signature des associations, collectifs et
-              organisations engagés dans la protection des enfants et le respect
-              des droits des familles s&apos;articule autour de trois axes.
+              {content.objectivesText}
             </p>
           </div>
 
@@ -84,10 +81,9 @@ export default function HomePage() {
               <div className="card-icon">
                 <FileText />
               </div>
-              <h3>Clarifier la notion de danger</h3>
+              <h3>{content.dangerTitle}</h3>
               <p>
-                Préciser les critères d&apos;appréciation du danger à partir
-                d&apos;éléments précis, objectifs, circonstanciés et actualisés.
+                {content.dangerText}
               </p>
             </article>
 
@@ -95,10 +91,9 @@ export default function HomePage() {
               <div className="card-icon">
                 <ShieldCheck />
               </div>
-              <h3>Instaurer un contrôle indépendant</h3>
+              <h3>{content.controlTitle}</h3>
               <p>
-                Prévoir un regard national indépendant sur le fonctionnement
-                des services de protection de l&apos;enfance.
+                {content.controlText}
               </p>
             </article>
 
@@ -106,10 +101,9 @@ export default function HomePage() {
               <div className="card-icon">
                 <Landmark />
               </div>
-              <h3>Renforcer le pilotage national</h3>
+              <h3>{content.coordinationTitle}</h3>
               <p>
-                Améliorer la coordination interministérielle, le suivi des
-                engagements et la transparence des politiques publiques.
+                {content.coordinationText}
               </p>
             </article>
           </div>
@@ -129,10 +123,10 @@ export default function HomePage() {
         >
           <div>
             <h2 style={{ color: "var(--navy)", margin: "0 0 8px" }}>
-              Prenez connaissance du texte
+              {content.ctaTitle}
             </h2>
             <p className="muted" style={{ margin: 0 }}>
-              Le PDF complet est consultable avant toute démarche de signature.
+              {content.ctaText}
             </p>
           </div>
 

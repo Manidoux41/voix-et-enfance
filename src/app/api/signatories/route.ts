@@ -3,16 +3,17 @@ import { signatorySchema } from "@/lib/validators/signatory";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 import { createOtp, hashOtp } from "@/lib/signing/security";
 import { sendOtpEmail } from "@/lib/signing/email";
+import { z } from "zod";
 
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
-  const parsed = signatorySchema.safeParse(body);
+  const parsed = signatorySchema.extend({ documentId: z.string().uuid() }).safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Données invalides", details: parsed.error.flatten() }, { status: 400 });
   try {
     const supabase = createSupabaseAdmin();
-    const { data: document, error: docError } = await supabase.from("documents").select("id,title,version,sha256_hash").eq("is_active", true).single();
-    if (docError || !document) return NextResponse.json({ error: "Aucun document de signature actif n'est publié." }, { status: 409 });
+    const { data: document, error: docError } = await supabase.from("documents").select("id,title,version,sha256_hash").eq("is_active", true).eq("id", parsed.data.documentId).single();
+    if (docError || !document) return NextResponse.json({ error: "Le document actif a changé ou n'est plus disponible. Rechargez la page et consultez la nouvelle version." }, { status: 409 });
     const now = new Date().toISOString(); const code = createOtp();
     const { data, error } = await supabase.from("signatories").insert({
       organization_name: parsed.data.organizationName, organization_type: parsed.data.organizationType,

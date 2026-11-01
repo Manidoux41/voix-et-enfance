@@ -1,17 +1,19 @@
 import Link from "next/link";
 import { Download, ExternalLink, FileText } from "lucide-react";
+import { getActiveDocument } from "@/lib/documents";
+import { getSiteContent } from "@/lib/site-content";
 
-const pdf = "/documents/proposition-loi-protection-enfance.pdf";
-
-export default function PropositionPage() {
+export const dynamic = "force-dynamic";
+export default async function PropositionPage() {
+  const [document, content] = await Promise.all([getActiveDocument(), getSiteContent("proposition")]);
+  const pdf = document ? `/api/documents/pdf?id=${document.id}` : "/documents/proposition-loi-protection-enfance.pdf";
   return (
     <>
       <section className="page-top">
         <div className="container">
-          <h1>La proposition de loi</h1>
+          <h1>{content.title}</h1>
           <p>
-            Consultez le document intégral avant de décider si votre structure
-            souhaite soutenir cette initiative.
+            {content.introduction}
           </p>
         </div>
       </section>
@@ -21,10 +23,9 @@ export default function PropositionPage() {
           <div className="pdf-toolbar">
             <div>
               <strong style={{ color: "var(--navy)" }}>
-                Proposition de loi visant à clarifier les critères du danger
-                justifiant une mesure d&apos;assistance éducative
+                {document?.title ?? "Proposition de loi sur la protection de l'enfance"}
               </strong>
-              <div className="muted">Document de référence · 5 pages</div>
+              <div className="muted">{document ? `Document actif · version ${document.version}` : "Document de présentation : aucune version de signature active"}</div>
             </div>
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -43,9 +44,7 @@ export default function PropositionPage() {
           </div>
 
           <div className="notice" style={{ marginBottom: 16 }}>
-            <strong>Important :</strong> prenez le temps de lire les cinq pages.
-            Le formulaire de soutien vous demandera de confirmer que vous avez
-            pris connaissance de cette version du texte.
+            <strong>Important :</strong> {content.notice}
           </div>
 
           <iframe

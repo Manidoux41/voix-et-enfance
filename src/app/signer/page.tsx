@@ -1,15 +1,18 @@
 import Link from "next/link";
 import { SignatoryForm } from "@/components/signatory-form";
+import { getActiveDocument } from "@/lib/documents";
+import { getSiteContent } from "@/lib/site-content";
 
-export default function SignerPage() {
+export const dynamic = "force-dynamic";
+export default async function SignerPage() {
+  const [document, content] = await Promise.all([getActiveDocument(), getSiteContent("signer")]);
   return (
     <>
       <section className="page-top">
         <div className="container">
-          <h1>Soutenir la proposition</h1>
+          <h1>{content.title}</h1>
           <p>
-            Cette démarche est réservée aux représentants habilités
-            d&apos;associations, collectifs et organisations.
+            {content.introduction}
           </p>
         </div>
       </section>
@@ -17,12 +20,14 @@ export default function SignerPage() {
       <section className="section">
         <div className="container content-grid">
           <div className="panel">
-            <h2>Informations de la structure</h2>
+            <h2>{content.formTitle}</h2>
             <p className="muted">
-              Complétez les informations ci-dessous. Les champs marqués d&apos;un
-              astérisque sont obligatoires.
+              {content.formIntroduction}
             </p>
-            <SignatoryForm />
+            {document ? <>
+              <p className="notice">Document à signer : {document.title} — version {document.version}. <a href={`/api/documents/pdf?id=${document.id}`} target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>Consulter cette version exacte du PDF</a>.</p>
+              <SignatoryForm documentId={document.id} />
+            </> : <p className="notice">Aucun document de signature actif. La collecte est indisponible pour le moment.</p>}
           </div>
 
           <aside className="panel">
@@ -32,7 +37,7 @@ export default function SignerPage() {
                 <b className="step-number">1</b>
                 <div>
                   <strong>Lire le texte</strong>
-                  <span>Consultez les cinq pages de la proposition.</span>
+                  <span>Consultez le document intégral dans sa version affichée.</span>
                 </div>
               </div>
 
