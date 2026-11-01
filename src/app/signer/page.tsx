@@ -48,15 +48,13 @@ export default function SignerPage() {
                 <b className="step-number">3</b>
                 <div>
                   <strong>Confirmer le soutien</strong>
-                  <span>Une demande individuelle de signature sera préparée.</span>
+                  <span>Vous vérifierez votre adresse e-mail puis signerez le document dans un espace sécurisé.</span>
                 </div>
               </div>
             </div>
 
             <div className="notice" style={{ marginTop: 22 }}>
-              Le connecteur OpenSign n&apos;est pas encore configuré. Cette
-              version de démonstration enregistre une demande locale, mais ne
-              réalise pas de signature électronique.
+              Le parcours comprend une vérification de l’adresse e-mail, un consentement explicite et une signature manuscrite électronique associée à la version exacte du document. Il s’agit d’un procédé de signature électronique simple : aucune qualification eIDAS n’est revendiquée.
             </div>
 
             <p className="muted" style={{ marginTop: 18 }}>
