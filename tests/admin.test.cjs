@@ -485,6 +485,37 @@ test("la suppression admin appelle la transaction avec acteur et refuse les conf
     assert.equal(response.headers.get("Cache-Control"), "private, no-store");
   }
 });
+test("la suppression groupee valide la selection et utilise un unique appel transactionnel", async () => {
+  const auth = authFixture().auth;
+  let calls = [];
+  let conflict = false;
+  const route = load("src/app/api/admin/signatories/route.ts", {
+    "@/lib/admin/auth": auth,
+    "@/lib/admin/http": httpFixture({ ...auth, requireAdmin: async () => ({
+      user: { id: "admin-id" }, db: { rpc: async (name, args) => {
+        calls.push({ name, args });
+        return { error: conflict ? { code: "P0001", message: "Demande protegee" } : null };
+      } },
+    }) }),
+  });
+  const ids = ["20000000-0000-4000-8000-000000000003", "20000000-0000-4000-8000-000000000004"];
+  const request = body => new Request("https://site.example/api/admin/signatories", {
+    method: "DELETE", headers: { Origin: "https://site.example" }, body: JSON.stringify(body),
+  });
+  assert.equal((await route.DELETE(request({ ids }))).status, 200);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].name, "delete_pending_signatories");
+  assert.equal(calls[0].args.actor, "admin-id");
+  assert.deepEqual(Array.from(calls[0].args.targets), ids);
+  calls = [];
+  for (const body of [{ ids: [] }, { ids: ["invalid"] }, { ids: [ids[0], ids[0]] },
+    { ids: Array(26).fill(ids[0]) }, { id: ids[0], ids }]) {
+    assert.equal((await route.DELETE(request(body))).status, 400);
+  }
+  assert.equal(calls.length, 0);
+  conflict = true;
+  assert.equal((await route.DELETE(request({ ids }))).status, 409);
+});
 test("seules les demandes en attente sans preuves peuvent proposer la suppression", () => {
   const { canDeletePending } = load("src/lib/admin/types.ts");
   const item = { status: "pending_signature", published_at: null, signatures: [] };

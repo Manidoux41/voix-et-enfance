@@ -63,9 +63,10 @@ export function AdminDashboard({ email, userId }: { email: string; userId: strin
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true); setError("");
+    setLoading(true); setError(""); setSelectedIds([]);
     async function load() {
       const options = { signal: controller.signal };
       if (tab === "signatories") setRegistry(await api<Registry>(`signatories?page=${page}&status=${encodeURIComponent(status)}&search=${encodeURIComponent(search)}`, options));
@@ -150,6 +151,19 @@ export function AdminDashboard({ email, userId }: { email: string; userId: strin
   }
   const count = tab === "signatories" ? registry?.count : tab === "documents" ? documents?.count : tab === "users" ? users?.count : audit?.count;
   const currentContent = content.find(item => item.page === contentPage);
+  const deletableItems = registry?.items.filter(canDeletePending) ?? [];
+  const selectedItems = deletableItems.filter(item => selectedIds.includes(item.id));
+  const allSelected = deletableItems.length > 0 && selectedItems.length === deletableItems.length;
+
+  async function deleteSelected() {
+    const ids = selectedItems.map(item => item.id);
+    if (!ids.length || !window.confirm(`Supprimer définitivement ces ${ids.length} demandes en attente et leurs codes de vérification ? Cette action est irréversible. Les signataires devront recommencer leur demande.`)) return;
+    await perform(async () => {
+      await api("signatories", json("DELETE", { ids }));
+      setSelectedIds([]);
+      if (registry && ids.length === registry.items.length && page > 1) setPage(value => value - 1);
+    }, `${ids.length} demande(s) en attente supprimée(s).`);
+  }
 
   return <>
     <div className="admin-toolbar">
@@ -177,8 +191,20 @@ export function AdminDashboard({ email, userId }: { email: string; userId: strin
     {loading ? <p role="status">Chargement…</p> : !error && <>
       {tab === "signatories" && <div className="panel">
         <h2>Demandes et signatures</h2><p className="muted">Seules les structures ayant une signature finalisée peuvent être publiées. Les coordonnées et les preuves restent privées.</p>
-        {!registry?.items.length ? <p>Aucune demande pour ces critères.</p> : <div className="table-wrap"><table><thead><tr><th>Structure</th><th>Représentant et coordonnées</th><th>Statut</th><th>Actions</th></tr></thead><tbody>
+        <div className="admin-toolbar">
+          <label className="checkbox-row"><input type="checkbox" checked={allSelected} disabled={busy || !deletableItems.length}
+            ref={element => { if (element) element.indeterminate = selectedItems.length > 0 && !allSelected; }}
+            onChange={event => setSelectedIds(event.target.checked ? deletableItems.map(item => item.id) : [])} />
+            Tout sélectionner sur cette page (demandes en attente uniquement)</label>
+          <button type="button" className="btn btn-outline" disabled={busy || !selectedItems.length} onClick={() => void deleteSelected()}>
+            Supprimer la sélection ({selectedItems.length})
+          </button>
+        </div>
+        {!registry?.items.length ? <p>Aucune demande pour ces critères.</p> : <div className="table-wrap"><table><thead><tr><th>Sélection</th><th>Structure</th><th>Représentant et coordonnées</th><th>Statut</th><th>Actions</th></tr></thead><tbody>
           {registry.items.map(item => <tr key={item.id}>
+            <td><input type="checkbox" aria-label={`Sélectionner la demande de ${item.organization_name}`}
+              disabled={busy || !canDeletePending(item)} checked={selectedIds.includes(item.id)}
+              onChange={event => setSelectedIds(ids => event.target.checked ? [...ids, item.id] : ids.filter(id => id !== item.id))} /></td>
             <td><strong>{item.organization_name}</strong><br />{item.organization_type}<br /><span className="muted">{date(item.created_at)}</span></td>
             <td>{item.representative_name}<br />{item.representative_role}<br />{item.email}
               <details><summary>Voir les coordonnées et preuves</summary><p>Téléphone : {item.phone || "Non renseigné"}<br />Adresse : {item.address || "Non renseignée"}<br />Site : {item.website || "Non renseigné"}</p>

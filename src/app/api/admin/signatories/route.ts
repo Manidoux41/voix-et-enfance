@@ -34,8 +34,14 @@ export const PATCH = adminRoute(async (request, { db, user }) => {
 });
 
 export const DELETE = adminRoute(async (request, { db, user }) => {
-  const { id } = z.object({ id: z.string().uuid() }).parse(await request.json());
-  const { error } = await db.rpc("delete_pending_signatory", { actor: user.id, target: id });
+  const input = z.union([
+    z.object({ id: z.string().uuid() }).strict(),
+    z.object({ ids: z.array(z.string().uuid()).min(1).max(25)
+      .refine(ids => new Set(ids).size === ids.length) }).strict(),
+  ]).parse(await request.json());
+  const { error } = "ids" in input
+    ? await db.rpc("delete_pending_signatories", { actor: user.id, targets: input.ids })
+    : await db.rpc("delete_pending_signatory", { actor: user.id, target: input.id });
   if (error) {
     if (error.code === "P0001") throw new AdminError(error.message, 409);
     throw error;

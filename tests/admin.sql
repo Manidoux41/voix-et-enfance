@@ -1,4 +1,4 @@
--- A executer uniquement dans une base locale jetable avec les migrations 001-004.
+-- A executer uniquement dans une base locale jetable avec les migrations 001-005.
 begin;
 insert into auth.users (id) values
   ('00000000-0000-4000-8000-000000000001'),
@@ -80,6 +80,50 @@ begin
   end if;
   if has_function_privilege('authenticated','public.delete_pending_signatory(uuid,uuid)','EXECUTE') then
     raise exception 'Suppression accessible publiquement';
+  end if;
+end;
+$$;
+insert into public.signatories (id,organization_name,organization_type,representative_name,representative_role,email,status)
+values
+  ('20000000-0000-4000-8000-000000000003','Lot A','Association','Test','Test','test@example.invalid','pending_signature'),
+  ('20000000-0000-4000-8000-000000000004','Lot B','Association','Test','Test','test@example.invalid','submitted');
+insert into public.signatures (signatory_id,status)
+values ('20000000-0000-4000-8000-000000000003','otp_pending');
+select pg_temp.expect_failure($test$select public.delete_pending_signatories('00000000-0000-4000-8000-000000000001',array['20000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000009']::uuid[])$test$);
+do $$
+begin
+  if not exists (select 1 from public.signatories where id='20000000-0000-4000-8000-000000000003')
+    or not exists (select 1 from public.signatures where signatory_id='20000000-0000-4000-8000-000000000003')
+    or exists (select 1 from public.audit_logs where action='signatory.pending_deleted' and entity_id='20000000-0000-4000-8000-000000000003') then
+    raise exception 'Lot partiellement supprime ou audite apres echec';
+  end if;
+end;
+$$;
+select pg_temp.expect_failure($test$select public.delete_pending_signatories('00000000-0000-4000-8000-000000000002',array['20000000-0000-4000-8000-000000000003']::uuid[])$test$);
+select pg_temp.expect_failure($test$select public.delete_pending_signatories('00000000-0000-4000-8000-000000000001',array[]::uuid[])$test$);
+select pg_temp.expect_failure($test$select public.delete_pending_signatories('00000000-0000-4000-8000-000000000001',array[null]::uuid[])$test$);
+select pg_temp.expect_failure($test$select public.delete_pending_signatories('00000000-0000-4000-8000-000000000001',array_fill('20000000-0000-4000-8000-000000000003'::uuid,array[26]))$test$);
+update public.signatories set status='signed' where id='20000000-0000-4000-8000-000000000004';
+select pg_temp.expect_failure($test$select public.delete_pending_signatories('00000000-0000-4000-8000-000000000001',array['20000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000004']::uuid[])$test$);
+do $$ begin
+  if not exists (select 1 from public.signatories where id='20000000-0000-4000-8000-000000000003') then
+    raise exception 'Demande supprimee malgre signature protegee dans le lot';
+  end if;
+end; $$;
+update public.signatories set status='submitted' where id='20000000-0000-4000-8000-000000000004';
+select public.delete_pending_signatories('00000000-0000-4000-8000-000000000001',array['20000000-0000-4000-8000-000000000004','20000000-0000-4000-8000-000000000003']::uuid[]);
+do $$
+begin
+  if exists (select 1 from public.signatories where id in ('20000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000004'))
+    or exists (select 1 from public.signatures where signatory_id='20000000-0000-4000-8000-000000000003') then
+    raise exception 'Lot non supprime';
+  end if;
+  if (select count(*) from public.audit_logs where action='signatory.pending_deleted' and entity_id in ('20000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000004')) <> 2 then
+    raise exception 'Audit incomplet du lot';
+  end if;
+  if has_function_privilege('authenticated','public.delete_pending_signatories(uuid,uuid[])','EXECUTE')
+    or has_function_privilege('anon','public.delete_pending_signatories(uuid,uuid[])','EXECUTE') then
+    raise exception 'Suppression groupee accessible publiquement';
   end if;
 end;
 $$;
