@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     const { error: uploadError } = await db.storage.from("signed-documents").upload(path, signedBytes, { contentType: "application/pdf", upsert: false });
     if (uploadError) throw uploadError;
     const now = new Date().toISOString();
-    const { error: updateError } = await db.from("signatures").update({ status: "signed", signed_at: now, signed_pdf_path: path, signed_pdf_hash: signedHash, signature_image_hash: sha256(png), consent_text: "Je confirme signer au nom de la structure indiquée, après lecture du document, et autorise la publication de son nom parmi les soutiens.", ip_address: request.headers.get("x-forwarded-for")?.split(",")[0] ?? null, user_agent: request.headers.get("user-agent") ?? null }).eq("id", sig.id);
+    const { error: updateError } = await db.from("signatures").update({ status: "signed", signed_at: now, signed_pdf_path: path, signed_pdf_hash: signedHash, signature_image_hash: sha256(png), consent_text: "Je confirme signer au nom de la structure indiquée, après lecture du document, et autorise la publication de son nom parmi les soutiens.", ip_address: request.headers.get("x-forwarded-for")?.split(",")[0] ?? null, user_agent: request.headers.get("user-agent") ?? null }).eq("id", sig.id).select("id").single();
     if (updateError) throw updateError;
     await db.from("signatories").update({ status: "signed" }).eq("id", parsed.data.id);
     await db.from("audit_logs").insert({ action: "signature.completed", entity_type: "signatory", entity_id: parsed.data.id, metadata: { signature_id: sig.id, document_hash: doc.sha256_hash, signed_pdf_hash: signedHash, signed_at: now } });

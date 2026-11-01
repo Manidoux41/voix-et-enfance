@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { canPublish, type AdminItem, type AuditItem, type DocumentItem, type Paged, type Signatory } from "@/lib/admin/types";
+import { canDeletePending, canPublish, type AdminItem, type AuditItem, type DocumentItem, type Paged, type Signatory } from "@/lib/admin/types";
 import { pageLabels, type ContentPage, type ContentRecord } from "@/lib/content-fields";
 
 type Tab = "signatories" | "documents" | "users" | "content" | "audit" | "account";
@@ -187,6 +187,14 @@ export function AdminDashboard({ email, userId }: { email: string; userId: strin
             </td>
             <td><span className="status">{statuses[item.status] ?? item.status}</span><p>{item.published_at ? "Publiée" : "Non publiée"}</p></td>
             <td><div className="admin-actions">
+              {canDeletePending(item) && <button type="button" className="btn btn-outline" disabled={busy} onClick={() => {
+                if (window.confirm(`Supprimer définitivement la demande en attente de ${item.organization_name} et ses codes de vérification ? Cette action est irréversible. Le signataire devra recommencer sa demande.`)) {
+                  void perform(async () => {
+                    await api("signatories", json("DELETE", { id: item.id }));
+                    if (registry.items.length === 1 && page > 1) setPage(value => value - 1);
+                  }, "Demande en attente supprimée. Les signatures finalisées sont conservées.");
+                }
+              }}>Supprimer la demande en attente</button>}
               <button type="button" className="btn btn-outline" disabled={busy || (!item.published_at && !canPublish(item))} onClick={() => {
                 if (window.confirm(`${item.published_at ? "Retirer du registre public" : "Publier le nom et le type de"} : ${item.organization_name} ?`))
                   void perform(() => api("signatories", json("PATCH", { id: item.id, publish: !item.published_at })), item.published_at ? "Structure retirée du registre public." : "Structure publiée.");

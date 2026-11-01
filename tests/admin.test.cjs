@@ -461,6 +461,46 @@ test("l’export PDF lit toutes les pages et filtre les preuves finalisees par v
   assert.equal(audit.action, "signatures.pdf_exported");
   assert.equal((await route.GET(new Request("https://site.example/api/admin/export/pdf?format=appendix"))).status, 400);
 });
+test("la suppression admin appelle la transaction avec acteur et refuse les conflits", async () => {
+  const auth = authFixture().auth;
+  for (const conflict of [false, true]) {
+    let call;
+    const route = load("src/app/api/admin/signatories/route.ts", {
+      "@/lib/admin/auth": auth,
+      "@/lib/admin/http": httpFixture({ ...auth, requireAdmin: async () => ({
+        user: { id: "admin-id" }, db: { rpc: async (name, args) => {
+          call = { name, args };
+          return { error: conflict ? { code: "P0001", message: "Signature finalisee" } : null };
+        } },
+      }) }),
+    });
+    const id = "20000000-0000-4000-8000-000000000002";
+    const response = await route.DELETE(new Request("https://site.example/api/admin/signatories", {
+      method: "DELETE", headers: { Origin: "https://site.example" }, body: JSON.stringify({ id }),
+    }));
+    assert.equal(response.status, conflict ? 409 : 200);
+    assert.equal(call.name, "delete_pending_signatory");
+    assert.equal(call.args.actor, "admin-id");
+    assert.equal(call.args.target, id);
+    assert.equal(response.headers.get("Cache-Control"), "private, no-store");
+  }
+});
+test("seules les demandes en attente sans preuves peuvent proposer la suppression", () => {
+  const { canDeletePending } = load("src/lib/admin/types.ts");
+  const item = { status: "pending_signature", published_at: null, signatures: [] };
+  assert.equal(canDeletePending(item), true);
+  for (const status of ["not_started", "otp_pending", "verified", "expired"]) {
+    assert.equal(canDeletePending({ ...item, signatures: [{ status }] }), true);
+  }
+  for (const status of ["signed", "rejected", "withdrawn"]) {
+    assert.equal(canDeletePending({ ...item, status }), false);
+  }
+  assert.equal(canDeletePending({ ...item, published_at: "date" }), false);
+  for (const field of ["signed_at", "signed_pdf_path", "signed_pdf_hash", "signature_image_hash", "certificate_path"]) {
+    assert.equal(canDeletePending({ ...item, signatures: [{ status: "verified", [field]: "proof" }] }), false);
+  }
+  assert.equal(canDeletePending({ ...item, signatures: [{ status: "signed" }] }), false);
+});
 test("seules les signatures complètes peuvent proposer la publication", () => {
   const { canPublish } = load("src/lib/admin/types.ts");
   const sig = { status: "signed", email_verified_at: "date", signed_at: "date", signed_pdf_path: "private.pdf", signed_pdf_hash: "hash" };

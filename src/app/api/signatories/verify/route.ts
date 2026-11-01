@@ -15,7 +15,8 @@ export async function POST(request: Request) {
     const signer = Array.isArray(sig.signatory) ? sig.signatory[0] : sig.signatory;
     const matches = safeEqual(hashOtp(parsed.data.code, signer.email), sig.otp_hash);
     if (!matches) { await db.from("signatures").update({ otp_attempts: sig.otp_attempts + 1 }).eq("id", sig.id); return NextResponse.json({ error: "Code incorrect." }, { status: 400 }); }
-    await db.from("signatures").update({ status: "verified", email_verified_at: new Date().toISOString(), otp_hash: null, otp_expires_at: null }).eq("id", sig.id);
+    const { error: updateError } = await db.from("signatures").update({ status: "verified", email_verified_at: new Date().toISOString(), otp_hash: null, otp_expires_at: null }).eq("id", sig.id).select("id").single();
+    if (updateError) throw new Error("La demande n’est plus disponible. Recommencez votre demande.", { cause: updateError });
     await db.from("audit_logs").insert({ action: "signature.email_verified", entity_type: "signatory", entity_id: parsed.data.id });
     return NextResponse.json({ verified: true });
   } catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "Erreur serveur" }, { status: 503 }); }

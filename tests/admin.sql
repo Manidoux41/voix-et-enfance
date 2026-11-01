@@ -1,4 +1,4 @@
--- A executer uniquement dans une base locale jetable avec les migrations 001-003.
+-- A executer uniquement dans une base locale jetable avec les migrations 001-004.
 begin;
 insert into auth.users (id) values
   ('00000000-0000-4000-8000-000000000001'),
@@ -57,6 +57,30 @@ begin
   if has_table_privilege('anon','public.published_structures','SELECT') or has_table_privilege('authenticated','public.signatories','SELECT') then raise exception 'Privilege public excessif'; end if;
   if has_function_privilege('authenticated','public.set_site_admin(uuid,uuid,text)','EXECUTE') then raise exception 'Fonction admin exposee'; end if;
   if not has_function_privilege('service_role','public.set_site_admin(uuid,uuid,text)','EXECUTE') then raise exception 'Fonction admin inaccessible au serveur'; end if;
+end;
+$$;
+insert into public.signatories (id,organization_name,organization_type,representative_name,representative_role,email,status)
+values ('20000000-0000-4000-8000-000000000002','A supprimer','Association','Test','Test','test@example.invalid','pending_signature');
+insert into public.signatures (signatory_id,status,otp_hash)
+values ('20000000-0000-4000-8000-000000000002','otp_pending','test-hash');
+select pg_temp.expect_failure($test$select public.delete_pending_signatory('00000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000002')$test$);
+select pg_temp.expect_failure($test$select public.delete_pending_signatory('00000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001')$test$);
+update public.signatures set signed_pdf_hash = repeat('d',64) where signatory_id='20000000-0000-4000-8000-000000000002';
+select pg_temp.expect_failure($test$select public.delete_pending_signatory('00000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000002')$test$);
+update public.signatures set signed_pdf_hash = null where signatory_id='20000000-0000-4000-8000-000000000002';
+select public.delete_pending_signatory('00000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000002');
+do $$
+begin
+  if exists (select 1 from public.signatories where id='20000000-0000-4000-8000-000000000002')
+    or exists (select 1 from public.signatures where signatory_id='20000000-0000-4000-8000-000000000002') then
+    raise exception 'Suppression incomplete';
+  end if;
+  if not exists (select 1 from public.audit_logs where action='signatory.pending_deleted' and entity_id='20000000-0000-4000-8000-000000000002') then
+    raise exception 'Audit de suppression absent';
+  end if;
+  if has_function_privilege('authenticated','public.delete_pending_signatory(uuid,uuid)','EXECUTE') then
+    raise exception 'Suppression accessible publiquement';
+  end if;
 end;
 $$;
 rollback;
