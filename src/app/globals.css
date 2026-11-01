@@ -101,7 +101,15 @@ th { color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:.06
 .footer { background:#14263d; color:#d6e0ea; padding:34px 0; margin-top:0; }
 .footer-inner { display:flex; justify-content:space-between; gap:24px; flex-wrap:wrap; }
 .footer small { color:#a9b8c8; line-height:1.7; }
+.install-grid { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); gap:24px; }
+.install-grid p,.install-grid li { line-height:1.7; }
+.install-grid h3 { color:var(--navy); margin-top:26px; }
+.install-share { text-align:center; }
+.install-qr { margin:20px auto; width:min(240px,100%); }
+.install-qr svg { display:block; width:100%; height:auto; }
+.install-link { display:block; overflow-wrap:anywhere; text-decoration:underline; margin:18px 0; }
 @media (max-width:800px) {
+  .install-grid { grid-template-columns:1fr; }
   .nav { display:none; }
   .hero-grid,.content-grid { grid-template-columns:1fr; }
   .hero { padding:54px 0; }

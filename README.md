@@ -29,6 +29,18 @@ npm run dev
 
 Ouvrir http://localhost:3000.
 
+## Installer la webapp sur mobile
+
+La page publique `/installer`, accessible dans la navigation et le pied de page, propose un lien partageable et un QR code généré localement (aucun service QR externe). Le lien utilise l'origine réelle de la page : partager celui du site HTTPS déployé, pas celui de `localhost`.
+
+- Android : ouvrir dans Chrome ou un navigateur compatible puis confirmer « Installer ». Le bouton apparaît uniquement lorsque le navigateur fournit l'invite native ; sinon utiliser son menu « Installer l'application » / « Ajouter à l'écran d'accueil ».
+- iPhone / iPad : ouvrir dans Safari, Partager → Ajouter à l'écran d'accueil, puis confirmer (activer « Ouvrir comme app web » si proposé).
+- Le QR code ouvre la page ; il ne peut pas installer sans consentement. Les navigateurs intégrés aux messageries peuvent nécessiter « Ouvrir dans Safari/Chrome ». Une installation déjà ouverte en mode autonome est signalée.
+
+Le manifeste `/manifest.webmanifest`, les icônes PNG (192 et 512 pixels, icône maskable et Apple) et `/sw.js` permettent l'ouverture autonome. Le service worker n'utilise aucun cache : documents, PDF signés, réponses API et sessions administrateur ne sont jamais stockés hors ligne. Il affiche seulement un message de connexion nécessaire lors d'une navigation publique sans réseau ; la signature et l'administration exigent Internet. Installer ne crée aucun compte et ne change aucune autorisation.
+
+Déployer sur HTTPS puis vérifier sur un appareil Android et un iPhone réels. L'installation dépend des capacités du navigateur, de ses règles et d'éventuelles installations antérieures. Les contrôles locaux du manifeste, des icônes et du service worker se lancent avec `npm run test:pwa`.
+
 ## PDF de référence
 
 Le PDF fourni a été copié dans `public/documents/proposition-loi-protection-enfance.pdf`. Le lecteur est accessible depuis l'accueil et depuis `/proposition`.

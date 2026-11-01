@@ -10,6 +10,7 @@
     "lint": "eslint",
     "test:admin": "node --test tests/admin.test.cjs",
     "test:migrations": "node --test tests/migrations.test.cjs",
+    "test:pwa": "node --test tests/pwa.test.cjs",
     "db:migrate": "node scripts/prisma.cjs deploy",
     "db:status": "node scripts/prisma.cjs status",
     "db:baseline": "node scripts/prisma.cjs baseline"
@@ -24,7 +25,8 @@
     "react-dom": "^19.0.0",
     "zod": "^3.24.2",
     "pdf-lib": "^1.17.1",
-    "prisma": "6.19.0"
+    "prisma": "6.19.0",
+    "qrcode.react": "^4.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
